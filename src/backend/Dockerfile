@@ -20,7 +20,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/server/main.go
 
 # 最終映像
-FROM alpine:latest
+FROM alpine:3.19
 
 # 安裝 CA 憑證（用於 HTTPS）
 RUN apk --no-cache add ca-certificates tzdata
@@ -52,4 +52,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # 執行應用程式
 CMD ["./main"]
+
 

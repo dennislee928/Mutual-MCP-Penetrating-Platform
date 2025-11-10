@@ -48,3 +48,4 @@ func (e *SecurityEvent) ResolutionTime() time.Duration {
 	return e.ResolvedAt.Sub(e.CreatedAt)
 }
 
+

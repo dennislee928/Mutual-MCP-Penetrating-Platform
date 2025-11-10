@@ -46,3 +46,4 @@ func (u *User) CanRead() bool {
 	return u.IsActive // 所有啟用的使用者都可讀取
 }
 
+

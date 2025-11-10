@@ -22,3 +22,4 @@ type ScanQueryParams struct {
 	Target   string `form:"target"`
 }
 
+

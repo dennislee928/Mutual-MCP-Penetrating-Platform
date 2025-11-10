@@ -58,3 +58,4 @@ func (s *ScanJob) Duration() time.Duration {
 	return s.CompletedAt.Sub(*s.StartedAt)
 }
 
+

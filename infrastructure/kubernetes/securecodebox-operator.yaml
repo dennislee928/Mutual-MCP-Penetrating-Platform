@@ -16,10 +16,32 @@ spec:
         app: securecodebox-operator
     spec:
       serviceAccountName: securecodebox-operator
+      # Pod 級別安全上下文
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10000
+        runAsGroup: 10000
+        fsGroup: 10000
       containers:
       - name: operator
         image: securecodebox/operator:latest
         imagePullPolicy: Always
+        # 容器級別安全上下文
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 10000
+          runAsGroup: 10000
+          capabilities:
+            drop:
+              - ALL
+        # 添加臨時卷支援
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+          - name: cache
+            mountPath: /var/cache
         env:
         - name: NAMESPACE
           valueFrom:
@@ -48,5 +70,11 @@ spec:
             port: 8080
           initialDelaySeconds: 5
           periodSeconds: 10
+      # 定義臨時卷
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
       restartPolicy: Always
 

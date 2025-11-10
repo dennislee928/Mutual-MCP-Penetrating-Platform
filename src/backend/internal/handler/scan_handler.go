@@ -261,3 +261,4 @@ func (h *ScanHandler) GetMetrics(c *gin.Context) {
 	c.JSON(http.StatusOK, metrics)
 }
 
+

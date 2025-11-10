@@ -15,10 +15,32 @@ spec:
       labels:
         app: parser-amass
     spec:
+      # Pod 級別安全上下文
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10000
+        runAsGroup: 10000
+        fsGroup: 10000
       containers:
       - name: parser
         image: securecodebox/parser-amass:latest
         imagePullPolicy: Always
+        # 容器級別安全上下文
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 10000
+          runAsGroup: 10000
+          capabilities:
+            drop:
+              - ALL
+        # 添加臨時卷支援（因為使用只讀根文件系統）
+        volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+          - name: cache
+            mountPath: /var/cache
         env:
         - name: DATABASE_URL
           value: "postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)"
@@ -46,6 +68,12 @@ spec:
             port: 8080
           initialDelaySeconds: 5
           periodSeconds: 5
+      # 定義臨時卷
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
       restartPolicy: Always
 ---
 apiVersion: v1

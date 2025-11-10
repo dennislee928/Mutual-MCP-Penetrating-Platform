@@ -7,6 +7,14 @@ metadata:
     app.kubernetes.io/name: argocd-server
 spec:
   type: LoadBalancer
+  # 限制來源 IP（安全加固）
+  # ⚠️ 請根據您的網路環境修改以下 IP 範圍
+  loadBalancerSourceRanges:
+    - "10.0.0.0/8"        # 內部網路（範例）
+    - "172.16.0.0/12"     # 內部網路（範例）
+    - "192.168.0.0/16"    # 內部網路（範例）
+    # 添加您的公司/辦公室 IP
+    # - "YOUR_OFFICE_IP/32"
   ports:
   - port: 80
     targetPort: 8080

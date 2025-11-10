@@ -111,12 +111,43 @@ func Load() (*Config, error) {
 
 // validate 驗證配置
 func (c *Config) validate() error {
+	environment := os.Getenv("ENVIRONMENT")
+	
+	// 資料庫密碼驗證
 	if c.Database.Password == "changeme" {
-		return fmt.Errorf("請設定 DB_PASSWORD 環境變數")
+		if environment == "production" {
+			return fmt.Errorf("❌ 生產環境不可使用預設資料庫密碼！請設定 DB_PASSWORD 環境變數")
+		}
+		// 開發環境發出警告
+		fmt.Println("⚠️  警告：使用預設資料庫密碼 'changeme'（僅限開發環境）")
 	}
+	
+	// JWT 密鑰驗證
 	if c.JWT.Secret == "your-secret-key-change-in-production" {
-		return fmt.Errorf("請設定 JWT_SECRET 環境變數")
+		if environment == "production" {
+			return fmt.Errorf("❌ 生產環境不可使用預設 JWT 密鑰！請設定 JWT_SECRET 環境變數")
+		}
+		fmt.Println("⚠️  警告：使用預設 JWT 密鑰（僅限開發環境）")
 	}
+	
+	// JWT 密鑰長度檢查（至少 32 字元）
+	if len(c.JWT.Secret) < 32 {
+		return fmt.Errorf("❌ JWT_SECRET 長度必須至少 32 字元，當前：%d 字元", len(c.JWT.Secret))
+	}
+	
+	// 生產環境額外檢查
+	if environment == "production" {
+		// 檢查是否使用了安全的 SSL 模式
+		if c.Database.SSLMode == "disable" {
+			fmt.Println("⚠️  警告：資料庫未啟用 SSL（生產環境建議啟用）")
+		}
+		
+		// 檢查 Redis 是否有密碼
+		if c.Redis.Password == "" {
+			fmt.Println("⚠️  警告：Redis 未設定密碼（生產環境建議設定）")
+		}
+	}
+	
 	return nil
 }
 
@@ -159,4 +190,5 @@ func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
 	}
 	return defaultValue
 }
+
 

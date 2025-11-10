@@ -144,3 +144,4 @@ func (c *Client) Stats() string {
 		stats.Hits, stats.Misses, stats.Timeouts, stats.TotalConns, stats.IdleConns, stats.StaleConns)
 }
 
+
