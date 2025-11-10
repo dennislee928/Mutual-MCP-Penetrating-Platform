@@ -310,10 +310,39 @@ python3 hexstrike_server.py
 - `infrastructure/kubernetes/`：K8s manifest
 - Offensive 子系統可在 K8s 跑成獨立 service，外部 GPT/Claude 透過 MCP 進來
 
-### 9.3 雲端
+### 9.3 雲端部署
 
-- Cloudflare Workers / OCI / IBM Cloud → 依照原來部署文件
-- Offensive 部分可直接用 Docker Hub image：`dennisleetw/hexstrike-ai:latest`
+#### Cloudflare Containers（✅ 已配置，Beta）
+
+**特點**：全球邊緣網路、自動擴展、按需計費
+
+```bash
+cd infrastructure/cloud-configs/cloudflare
+
+# 修復 npm 錯誤（如遇到）
+Get-Process node | Stop-Process -Force  # Windows
+npm cache clean --force
+
+# 安裝並部署
+npm install
+./deploy.ps1  # Windows
+# 或
+./deploy.sh   # Linux/Mac
+```
+
+**文檔**：
+- 📖 [Cloudflare 部署指南](infrastructure/cloud-configs/cloudflare/README.md)
+- 🔧 [修復 npm 錯誤](infrastructure/cloud-configs/cloudflare/FIX_NPM_EBUSY.md)
+- ✅ [部署檢查清單](infrastructure/cloud-configs/cloudflare/DEPLOYMENT_CHECKLIST.md)
+
+**參考**：[Cloudflare Containers 官方文檔](https://developers.cloudflare.com/containers/)
+
+#### 其他雲端平台
+
+- **Railway**（推薦）：原生容器支援，內建 PostgreSQL
+- **Render**：簡單易用，免費層友善
+- **Fly.io**：高性能，全球邊緣
+- **OCI / IBM Cloud**：依照原來部署文件
 
 ---
 

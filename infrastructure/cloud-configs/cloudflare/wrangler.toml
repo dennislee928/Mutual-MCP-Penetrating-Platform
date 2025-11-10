@@ -1,0 +1,109 @@
+# Cloudflare Containers 部署配置
+# 統一安全平台 - 後端服務部署
+# 文檔：https://developers.cloudflare.com/containers/
+
+name = "unified-security-platform"
+main = "src/worker.js"
+compatibility_date = "2025-11-10"
+
+# ============================================
+# Container 定義
+# ============================================
+
+# Go 後端容器
+[[containers]]
+class_name = "GoBackend"
+image = "../../src/backend/Dockerfile"
+max_instances = 10
+memory_mb = 512
+cpu_per_instance = 1
+
+# Python AI/量子容器
+[[containers]]
+class_name = "AIQuantum"
+image = "../../src/ai-quantum/Dockerfile"
+max_instances = 5
+memory_mb = 1024
+cpu_per_instance = 2
+
+# HexStrike AI 容器
+[[containers]]
+class_name = "HexStrikeAI"
+image = "../../src/hexstrike-ai/Dockerfile"
+max_instances = 10
+memory_mb = 2048
+cpu_per_instance = 2
+
+# ============================================
+# Durable Objects 綁定
+# ============================================
+
+[[durable_objects.bindings]]
+class_name = "GoBackend"
+name = "GO_BACKEND"
+
+[[durable_objects.bindings]]
+class_name = "AIQuantum"
+name = "AI_QUANTUM"
+
+[[durable_objects.bindings]]
+class_name = "HexStrikeAI"
+name = "HEXSTRIKE_AI"
+
+# ============================================
+# Migrations
+# ============================================
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GoBackend", "AIQuantum", "HexStrikeAI"]
+
+# ============================================
+# 環境變數
+# ============================================
+
+[vars]
+ENVIRONMENT = "production"
+
+# ============================================
+# Secrets（需使用 wrangler secret put 設定）
+# ============================================
+# wrangler secret put DB_PASSWORD
+# wrangler secret put JWT_SECRET
+# wrangler secret put REDIS_PASSWORD
+# wrangler secret put HEXSTRIKE_API_KEYS
+
+# ============================================
+# KV Namespaces（快取）
+# ============================================
+[[kv_namespaces]]
+binding = "CACHE"
+id = "your-kv-namespace-id"
+
+# ============================================
+# D1 Database（可選）
+# ============================================
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "unified-security-db"
+# database_id = "your-d1-database-id"
+
+# ============================================
+# R2 Buckets（物件儲存）
+# ============================================
+[[r2_buckets]]
+binding = "SCAN_RESULTS"
+bucket_name = "scan-results"
+
+# ============================================
+# 監控與日誌
+# ============================================
+[observability]
+enabled = true
+
+# ============================================
+# Limits（根據需求調整）
+# ============================================
+[limits]
+cpu_ms = 50000
+
