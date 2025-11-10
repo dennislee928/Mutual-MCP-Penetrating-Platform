@@ -1,0 +1,34 @@
+# HexStrike AI Service Worker Configuration (使用 Docker Hub 映像)
+name = "unified-hexstrike"
+main = "src/hexstrike-worker.js"
+compatibility_date = "2025-11-10"
+compatibility_flags = ["nodejs_compat"]
+
+# Container configuration - 使用 Docker Hub 映像
+# 部署前請更新 image 為您的 Docker Hub 映像
+[[containers]]
+class_name = "HexStrikeContainer"
+# 格式: dockerhub-username/image-name:tag
+# 範例: image = "pcleegood/hexstrike-ai:latest"
+image = "YOUR_DOCKERHUB_USERNAME/hexstrike-ai:latest"
+max_instances = 2
+
+# Durable Objects binding
+[[durable_objects.bindings]]
+class_name = "HexStrikeContainer"
+name = "HEXSTRIKE_CONTAINER"
+
+# Migrations for Durable Objects
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["HexStrikeContainer"]
+
+# Environment variables
+[vars]
+SERVICE_NAME = "hexstrike"
+ENVIRONMENT = "production"
+
+# Observability
+[observability]
+enabled = true
+
