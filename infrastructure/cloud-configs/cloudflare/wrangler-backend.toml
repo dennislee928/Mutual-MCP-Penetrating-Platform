@@ -1,0 +1,31 @@
+# Backend Service Worker Configuration
+name = "unified-backend"
+main = "src/backend-worker.js"
+compatibility_date = "2025-11-10"
+compatibility_flags = ["nodejs_compat"]
+
+# Container configuration
+[[containers]]
+class_name = "BackendContainer"
+image = "../../../src/backend/Dockerfile"
+max_instances = 5
+
+# Durable Objects binding
+[[durable_objects.bindings]]
+class_name = "BackendContainer"
+name = "BACKEND_CONTAINER"
+
+# Migrations for Durable Objects
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BackendContainer"]
+
+# Environment variables
+[vars]
+SERVICE_NAME = "backend"
+ENVIRONMENT = "production"
+
+# Observability
+[observability]
+enabled = true
+

@@ -1,0 +1,31 @@
+# AI/Quantum Service Worker Configuration
+name = "unified-ai-quantum"
+main = "src/ai-worker.js"
+compatibility_date = "2025-11-10"
+compatibility_flags = ["nodejs_compat"]
+
+# Container configuration
+[[containers]]
+class_name = "AIContainer"
+image = "../../../src/ai-quantum/Dockerfile"
+max_instances = 3
+
+# Durable Objects binding
+[[durable_objects.bindings]]
+class_name = "AIContainer"
+name = "AI_CONTAINER"
+
+# Migrations for Durable Objects
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AIContainer"]
+
+# Environment variables
+[vars]
+SERVICE_NAME = "ai-quantum"
+ENVIRONMENT = "production"
+
+# Observability
+[observability]
+enabled = true
+

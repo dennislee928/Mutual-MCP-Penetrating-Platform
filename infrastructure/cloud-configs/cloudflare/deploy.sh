@@ -151,7 +151,9 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         
         if docker build -t unified-backend:latest .; then
             cd "$SCRIPT_DIR"
-            if wrangler containers push backend "$BACKEND_DIR"; then
+            # Tag image for Cloudflare Container Registry
+            docker tag unified-backend:latest backend:latest
+            if wrangler containers push backend; then
                 echo -e "${GREEN}✅ Go Backend 映像已推送${NC}"
             else
                 echo -e "${RED}❌ Go Backend 推送失敗${NC}"
@@ -178,7 +180,9 @@ if [ "$DEPLOY_AI" = true ]; then
         
         if docker build -t unified-ai-quantum:latest .; then
             cd "$SCRIPT_DIR"
-            if wrangler containers push ai-quantum "$AI_DIR"; then
+            # Tag image for Cloudflare Container Registry
+            docker tag unified-ai-quantum:latest ai-quantum:latest
+            if wrangler containers push ai-quantum; then
                 echo -e "${GREEN}✅ AI/Quantum 映像已推送${NC}"
             else
                 echo -e "${RED}❌ AI/Quantum 推送失敗${NC}"
@@ -205,7 +209,9 @@ if [ "$DEPLOY_HEXSTRIKE" = true ]; then
         
         if docker build -t unified-hexstrike:latest .; then
             cd "$SCRIPT_DIR"
-            if wrangler containers push hexstrike "$HEXSTRIKE_DIR"; then
+            # Tag image for Cloudflare Container Registry
+            docker tag unified-hexstrike:latest hexstrike:latest
+            if wrangler containers push hexstrike; then
                 echo -e "${GREEN}✅ HexStrike AI 映像已推送${NC}"
             else
                 echo -e "${RED}❌ HexStrike AI 推送失敗${NC}"

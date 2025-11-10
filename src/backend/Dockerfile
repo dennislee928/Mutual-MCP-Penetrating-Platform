@@ -1,5 +1,5 @@
 # 多階段建置 Dockerfile
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # 安裝建置依賴
 RUN apk add --no-cache git make
