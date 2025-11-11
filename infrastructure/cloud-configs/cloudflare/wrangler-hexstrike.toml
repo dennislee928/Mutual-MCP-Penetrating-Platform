@@ -5,9 +5,12 @@ compatibility_date = "2025-11-10"
 compatibility_flags = ["nodejs_compat"]
 
 # Container configuration
+# 映像必須先使用 wrangler containers push 推送到 Cloudflare 容器註冊表
+# 執行: bash ./push-dockerhub-to-cloudflare.sh
+# 注意：Cloudflare 不允許使用 latest tag，必須使用具體的 digest
 [[containers]]
 class_name = "HexStrikeContainer"
-image = "../../../src/hexstrike-ai/Dockerfile"
+image = "registry.cloudflare.com/8dfc8c4994bd0925c72ab9e2eff79b48/hexstrike@sha256:0e7e3d631f36a035e5b2178dc89adc2188c1219833bbe6ec17684e06a65881d5"
 max_instances = 2
 
 # Durable Objects binding

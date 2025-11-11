@@ -1,0 +1,108 @@
+# Terraform Variables Example
+# 複製此檔案為 terraform.tfvars 並填入實際值
+# 注意：terraform.tfvars 已加入 .gitignore，不會提交到 Git
+
+# ========================================
+# Cloudflare 配置
+# ========================================
+
+# Cloudflare Account ID
+# 在 Cloudflare Dashboard 的 URL 中可找到：
+# https://dash.cloudflare.com/<account-id>
+cloudflare_account_id = "your-cloudflare-account-id"
+
+# Cloudflare API Token
+# 創建方式：
+# 1. 登入 Cloudflare Dashboard
+# 2. 進入 My Profile → API Tokens
+# 3. Create Token → 選擇 "Edit Cloudflare Workers" 模板
+# 4. 添加 "Containers" 權限
+cloudflare_api_token = "your-cloudflare-api-token"
+
+# Cloudflare Zone ID (可選，用於自訂網域)
+# cloudflare_zone_id = "your-zone-id"
+
+# ========================================
+# Docker Hub 配置
+# ========================================
+
+# Docker Hub 用戶名
+dockerhub_username = "dennisleetw"
+
+# Docker Hub Access Token
+# 創建方式：
+# 1. 登入 https://hub.docker.com
+# 2. Account Settings → Security → New Access Token
+dockerhub_token = "your-dockerhub-token"
+
+# ========================================
+# 專案配置
+# ========================================
+
+project_name = "unified-security-platform"
+environment  = "production" # dev, staging, or production
+
+# ========================================
+# Worker 環境變數
+# ========================================
+
+worker_environment_vars = {
+  SERVICE_NAME    = "hexstrike"
+  ENVIRONMENT     = "production"
+  LOG_LEVEL       = "info"
+  API_VERSION     = "v1"
+  MAX_CONCURRENCY = "10"
+}
+
+# ========================================
+# 容器配置
+# ========================================
+
+# HexStrike 容器配置
+hexstrike_max_instances = 2
+hexstrike_image         = "dennisleetw/hexstrike-ai:latest"
+
+# Backend 容器配置 (如需部署)
+# backend_max_instances = 5
+# backend_image         = "dennisleetw/backend:latest"
+
+# AI/Quantum 容器配置 (如需部署)
+# ai_max_instances = 3
+# ai_image         = "dennisleetw/ai-quantum:latest"
+
+# ========================================
+# 建置配置
+# ========================================
+
+# 是否啟用 Docker 映像建置
+# 注意：需要本地 Docker daemon 運行
+enable_docker_build = false
+
+# 是否推送到 Cloudflare 容器註冊表
+enable_cloudflare_push = true
+
+# ========================================
+# 進階配置
+# ========================================
+
+# 啟用 workers.dev 子網域
+workers_dev = true
+
+# 啟用預覽 URLs
+preview_urls = true
+
+# 啟用可觀測性功能
+observability_enabled = true
+
+# ========================================
+# 標籤
+# ========================================
+
+tags = {
+  Project     = "Unified Security Platform"
+  ManagedBy   = "Terraform"
+  Environment = "production"
+  Team        = "Security"
+  CostCenter  = "Engineering"
+}
+

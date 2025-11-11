@@ -131,3 +131,5 @@ func (r *ScanRepository) CountByScanType() (map[string]int64, error) {
 
 
 
+
+

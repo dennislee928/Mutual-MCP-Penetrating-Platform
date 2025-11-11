@@ -1,0 +1,9 @@
+# Production Environment Variables Example
+
+cloudflare_account_id = "your-production-account-id"
+cloudflare_api_token  = "your-production-api-token"
+cloudflare_zone_id    = "your-zone-id" # 可選
+
+dockerhub_username = "dennisleetw"
+dockerhub_token    = "your-dockerhub-token"
+

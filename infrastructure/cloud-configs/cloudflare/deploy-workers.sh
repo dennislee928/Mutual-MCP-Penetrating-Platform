@@ -85,8 +85,9 @@ fi
 
 # 部署 HexStrike Worker
 if [ "$DEPLOY_HEXSTRIKE" = true ]; then
-    echo -e "\n${CYAN}📤 部署 HexStrike Worker...${NC}"
-    if wrangler deploy --config wrangler-hexstrike.toml; then
+    echo -e "\n${CYAN}📤 部署 HexStrike Worker (使用 Docker Hub 映像)...${NC}"
+    echo -e "${YELLOW}   映像: dennisleetw/hexstrike-ai:latest${NC}"
+    if wrangler deploy --config wrangler-hexstrike-dockerhub.toml; then
         echo -e "${GREEN}✅ HexStrike Worker 部署成功${NC}"
     else
         echo -e "${RED}❌ HexStrike Worker 部署失敗${NC}"

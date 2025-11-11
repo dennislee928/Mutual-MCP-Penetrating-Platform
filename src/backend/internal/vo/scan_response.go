@@ -116,3 +116,5 @@ func FromScanFinding(finding *model.ScanFinding) ScanFindingResponse {
 
 
 
+
+

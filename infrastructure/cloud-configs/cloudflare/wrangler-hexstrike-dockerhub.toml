@@ -10,7 +10,7 @@ compatibility_flags = ["nodejs_compat"]
 class_name = "HexStrikeContainer"
 # 格式: dockerhub-username/image-name:tag
 # 範例: image = "pcleegood/hexstrike-ai:latest"
-image = "YOUR_DOCKERHUB_USERNAME/hexstrike-ai:latest"
+image = "dennisleetw/hexstrike-ai:latest"
 max_instances = 2
 
 # Durable Objects binding
