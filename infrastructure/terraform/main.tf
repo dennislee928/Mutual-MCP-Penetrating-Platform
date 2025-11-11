@@ -2,6 +2,20 @@
 # 統一安全平台 - Cloudflare Workers 部署
 
 # ========================================
+# Cloudflare D1 資料庫
+# ========================================
+
+module "d1_database" {
+  source = "./modules/cloudflare-d1"
+  
+  account_id       = var.cloudflare_account_id
+  api_token        = var.cloudflare_api_token
+  database_name    = "security-platform-db"
+  binding_name     = "DB"
+  schema_file_path = "${path.module}/d1-schema.sql"
+}
+
+# ========================================
 # HexStrike AI 容器和 Worker
 # ========================================
 
@@ -46,31 +60,19 @@ module "hexstrike_worker" {
   # Terraform Cloudflare Provider 對 Durable Objects 的支援有限
   
   workers_dev_enabled = var.workers_dev
-  custom_domain       = var.cloudflare_zone_id != "" ? "api.hexstrike.${data.cloudflare_zone.main[0].name}" : ""
+  custom_domain       = var.cloudflare_zone_id != "" ? "hexstrike-self.${data.cloudflare_zone.main[0].name}" : ""
   zone_id             = var.cloudflare_zone_id
-  route_pattern       = var.cloudflare_zone_id != "" ? "api.hexstrike.${data.cloudflare_zone.main[0].name}/*" : "*"
+  route_pattern       = var.cloudflare_zone_id != "" ? "hexstrike-self.${data.cloudflare_zone.main[0].name}/*" : "*"
 }
 
 # ========================================
-# Backend Worker (Optional)
+# Backend Worker (防禦層 - 純 JS Worker)
 # ========================================
-
-module "backend_container" {
-  count  = var.enable_backend_worker ? 1 : 0
-  source = "./modules/cloudflare-container"
-  
-  account_id      = var.cloudflare_account_id
-  api_token       = var.cloudflare_api_token
-  image_name      = "backend"
-  dockerhub_image = var.backend_image
-  max_instances   = var.backend_max_instances
-  instance_type   = "standard"
-}
 
 module "backend_worker" {
   count      = var.enable_backend_worker ? 1 : 0
   source     = "./modules/cloudflare-worker"
-  depends_on = [module.backend_container]
+  depends_on = [module.d1_database]
   
   account_id = var.cloudflare_account_id
   name       = "unified-backend"
@@ -81,34 +83,31 @@ module "backend_worker" {
   compatibility_date  = "2025-11-10"
   compatibility_flags = ["nodejs_compat"]
   
-  environment_vars = {
-    SERVICE_NAME = "backend"
-    ENVIRONMENT  = var.environment
-  }
+  environment_vars = merge(
+    var.worker_environment_vars,
+    {
+      SERVICE_NAME = "backend"
+      ENVIRONMENT  = var.environment
+      AI_WORKER_URL = "https://unified-ai-quantum.dennisleehappy.org"
+    }
+  )
   
   workers_dev_enabled = var.workers_dev
-}
-
-# ========================================
-# AI/Quantum Worker (Optional)
-# ========================================
-
-module "ai_container" {
-  count  = var.enable_ai_worker ? 1 : 0
-  source = "./modules/cloudflare-container"
+  custom_domain       = var.cloudflare_zone_id != "" ? "unified-backend.${data.cloudflare_zone.main[0].name}" : ""
+  zone_id             = var.cloudflare_zone_id
+  route_pattern       = var.cloudflare_zone_id != "" ? "unified-backend.${data.cloudflare_zone.main[0].name}/*" : "*"
   
-  account_id      = var.cloudflare_account_id
-  api_token       = var.cloudflare_api_token
-  image_name      = "ai-quantum"
-  dockerhub_image = var.ai_image
-  max_instances   = var.ai_max_instances
-  instance_type   = "standard"
+  # D1 資料庫 binding 將在 wrangler.toml 中配置
 }
+
+# ========================================
+# AI/Quantum Worker (ML 防禦層 - 純 JS Worker)
+# ========================================
 
 module "ai_worker" {
   count      = var.enable_ai_worker ? 1 : 0
   source     = "./modules/cloudflare-worker"
-  depends_on = [module.ai_container]
+  depends_on = [module.d1_database]
   
   account_id = var.cloudflare_account_id
   name       = "unified-ai-quantum"
@@ -119,12 +118,21 @@ module "ai_worker" {
   compatibility_date  = "2025-11-10"
   compatibility_flags = ["nodejs_compat"]
   
-  environment_vars = {
-    SERVICE_NAME = "ai-quantum"
-    ENVIRONMENT  = var.environment
-  }
+  environment_vars = merge(
+    var.worker_environment_vars,
+    {
+      SERVICE_NAME    = "ai-quantum"
+      ENVIRONMENT     = var.environment
+      MODEL_VERSION   = "v1.0.0-baseline"
+    }
+  )
   
   workers_dev_enabled = var.workers_dev
+  custom_domain       = var.cloudflare_zone_id != "" ? "unified-ai-quantum.${data.cloudflare_zone.main[0].name}" : ""
+  zone_id             = var.cloudflare_zone_id
+  route_pattern       = var.cloudflare_zone_id != "" ? "unified-ai-quantum.${data.cloudflare_zone.main[0].name}/*" : "*"
+  
+  # D1 資料庫 binding 將在 wrangler.toml 中配置
 }
 
 # ========================================

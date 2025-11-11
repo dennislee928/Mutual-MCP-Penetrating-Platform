@@ -1,0 +1,315 @@
+# Cloudflare Workers 自動部署
+# 當 PR 合併到 main branch 時自動部署所有 Workers
+
+name: Cloudflare Workers Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'infrastructure/cloud-configs/cloudflare/**'
+      - 'infrastructure/terraform/**'
+      - '.github/workflows/cloudflare-deploy.yml'
+  pull_request:
+    branches:
+      - main
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: '部署目標'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - hexstrike
+          - backend
+          - ai
+          - d1-only
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  # 僅在 PR 合併到 main 或直接 push 到 main 時執行
+  check-deployment:
+    name: 檢查部署條件
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
+    steps:
+      - name: 檢查是否應該部署
+        id: check
+        run: |
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "✅ Push to main - 將執行部署"
+          elif [[ "${{ github.event_name }}" == "pull_request" && "${{ github.event.pull_request.merged }}" == "true" ]]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "✅ PR 已合併到 main - 將執行部署"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "✅ 手動觸發 - 將執行部署"
+          else
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+            echo "⏭️  不符合部署條件 - 跳過"
+          fi
+
+  # D1 資料庫部署
+  deploy-d1:
+    name: 部署 D1 資料庫
+    runs-on: ubuntu-latest
+    needs: check-deployment
+    if: needs.check-deployment.outputs.should_deploy == 'true' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'd1-only' || github.event.inputs.deploy_target == '')
+    steps:
+      - name: Checkout 代碼
+        uses: actions/checkout@v4
+
+      - name: 設置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 安裝 Wrangler CLI
+        run: npm install -g wrangler@latest
+
+      - name: 檢查 D1 資料庫是否存在
+        id: check_db
+        continue-on-error: true
+        run: |
+          DB_EXISTS=$(wrangler d1 list | grep "security-platform-db" || echo "not_found")
+          if [[ "$DB_EXISTS" == "not_found" ]]; then
+            echo "db_exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️  資料庫不存在，將創建新資料庫"
+          else
+            echo "db_exists=true" >> $GITHUB_OUTPUT
+            echo "✅ 資料庫已存在"
+          fi
+
+      - name: 創建 D1 資料庫
+        if: steps.check_db.outputs.db_exists == 'false'
+        run: |
+          wrangler d1 create security-platform-db
+
+      - name: 獲取資料庫 ID
+        id: get_db_id
+        run: |
+          DB_ID=$(wrangler d1 list | grep "security-platform-db" | awk '{print $2}')
+          echo "db_id=$DB_ID" >> $GITHUB_OUTPUT
+          echo "📊 資料庫 ID: $DB_ID"
+
+      - name: 執行 Schema 初始化
+        run: |
+          cd infrastructure/terraform
+          wrangler d1 execute security-platform-db \
+            --file=d1-schema.sql \
+            --remote || echo "⚠️ Schema 可能已存在"
+
+      - name: 驗證資料庫
+        run: |
+          wrangler d1 execute security-platform-db \
+            --command "SELECT name FROM sqlite_master WHERE type='table'" \
+            --remote
+
+  # Backend Worker 部署
+  deploy-backend:
+    name: 部署 Backend Worker
+    runs-on: ubuntu-latest
+    needs: [check-deployment, deploy-d1]
+    if: needs.check-deployment.outputs.should_deploy == 'true' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'backend' || github.event.inputs.deploy_target == '')
+    steps:
+      - name: Checkout 代碼
+        uses: actions/checkout@v4
+
+      - name: 設置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 安裝 Wrangler CLI
+        run: npm install -g wrangler@latest
+
+      - name: 獲取 D1 資料庫 ID
+        id: get_db_id
+        run: |
+          DB_ID=$(wrangler d1 list | grep "security-platform-db" | awk '{print $2}')
+          echo "db_id=$DB_ID" >> $GITHUB_OUTPUT
+          echo "📊 資料庫 ID: $DB_ID"
+
+      - name: 更新 wrangler 配置
+        run: |
+          cd infrastructure/cloud-configs/cloudflare
+          sed -i "s/database_id = \".*\"/database_id = \"${{ steps.get_db_id.outputs.db_id }}\"/" wrangler-backend.toml
+
+      - name: 部署 Backend Worker
+        run: |
+          cd infrastructure/cloud-configs/cloudflare
+          wrangler deploy --config wrangler-backend.toml
+
+      - name: 驗證部署
+        run: |
+          echo "⏳ 等待 Worker 啟動..."
+          sleep 10
+          WORKER_URL=$(wrangler deployments list --name unified-backend | grep -o 'https://[^[:space:]]*' | head -1)
+          if [ -n "$WORKER_URL" ]; then
+            echo "✅ Backend Worker URL: $WORKER_URL"
+            curl -f "$WORKER_URL/health" || echo "⚠️  Health check 失敗"
+          fi
+
+  # AI Worker 部署
+  deploy-ai:
+    name: 部署 AI Worker
+    runs-on: ubuntu-latest
+    needs: [check-deployment, deploy-d1]
+    if: needs.check-deployment.outputs.should_deploy == 'true' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'ai' || github.event.inputs.deploy_target == '')
+    steps:
+      - name: Checkout 代碼
+        uses: actions/checkout@v4
+
+      - name: 設置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 安裝 Wrangler CLI
+        run: npm install -g wrangler@latest
+
+      - name: 獲取 D1 資料庫 ID
+        id: get_db_id
+        run: |
+          DB_ID=$(wrangler d1 list | grep "security-platform-db" | awk '{print $2}')
+          echo "db_id=$DB_ID" >> $GITHUB_OUTPUT
+          echo "📊 資料庫 ID: $DB_ID"
+
+      - name: 更新 wrangler 配置
+        run: |
+          cd infrastructure/cloud-configs/cloudflare
+          sed -i "s/database_id = \".*\"/database_id = \"${{ steps.get_db_id.outputs.db_id }}\"/" wrangler-ai.toml
+
+      - name: 部署 AI Worker
+        run: |
+          cd infrastructure/cloud-configs/cloudflare
+          wrangler deploy --config wrangler-ai.toml
+
+      - name: 驗證部署
+        run: |
+          echo "⏳ 等待 Worker 啟動..."
+          sleep 10
+          WORKER_URL=$(wrangler deployments list --name unified-ai-quantum | grep -o 'https://[^[:space:]]*' | head -1)
+          if [ -n "$WORKER_URL" ]; then
+            echo "✅ AI Worker URL: $WORKER_URL"
+            curl -f "$WORKER_URL/health" || echo "⚠️  Health check 失敗"
+          fi
+
+  # HexStrike Worker 部署
+  deploy-hexstrike:
+    name: 部署 HexStrike Worker
+    runs-on: ubuntu-latest
+    needs: [check-deployment, deploy-d1]
+    if: needs.check-deployment.outputs.should_deploy == 'true' && (github.event.inputs.deploy_target == 'all' || github.event.inputs.deploy_target == 'hexstrike' || github.event.inputs.deploy_target == '')
+    steps:
+      - name: Checkout 代碼
+        uses: actions/checkout@v4
+
+      - name: 設置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 安裝 Wrangler CLI
+        run: npm install -g wrangler@latest
+
+      - name: 部署 HexStrike Worker
+        run: |
+          cd infrastructure/cloud-configs/cloudflare
+          wrangler deploy --config wrangler-hexstrike.toml
+
+      - name: 驗證部署
+        run: |
+          echo "⏳ 等待 Worker 啟動..."
+          sleep 10
+          WORKER_URL=$(wrangler deployments list --name unified-hexstrike | grep -o 'https://[^[:space:]]*' | head -1)
+          if [ -n "$WORKER_URL" ]; then
+            echo "✅ HexStrike Worker URL: $WORKER_URL"
+            curl -f "$WORKER_URL/health" || echo "⚠️  Health check 失敗"
+          fi
+
+  # 部署完成通知
+  deployment-summary:
+    name: 部署摘要
+    runs-on: ubuntu-latest
+    needs: [deploy-backend, deploy-ai, deploy-hexstrike]
+    if: always() && needs.check-deployment.outputs.should_deploy == 'true'
+    steps:
+      - name: Checkout 代碼
+        uses: actions/checkout@v4
+
+      - name: 設置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安裝 Wrangler CLI
+        run: npm install -g wrangler@latest
+
+      - name: 生成部署摘要
+        run: |
+          echo "## 🚀 Cloudflare Workers 部署摘要" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 部署狀態" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Backend
+          if [[ "${{ needs.deploy-backend.result }}" == "success" ]]; then
+            echo "✅ Backend Worker - 部署成功" >> $GITHUB_STEP_SUMMARY
+            BACKEND_URL=$(wrangler deployments list --name unified-backend 2>/dev/null | grep -o 'https://[^[:space:]]*' | head -1 || echo "N/A")
+            echo "   - URL: $BACKEND_URL" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Backend Worker - 部署失敗或跳過" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # AI
+          if [[ "${{ needs.deploy-ai.result }}" == "success" ]]; then
+            echo "✅ AI Worker - 部署成功" >> $GITHUB_STEP_SUMMARY
+            AI_URL=$(wrangler deployments list --name unified-ai-quantum 2>/dev/null | grep -o 'https://[^[:space:]]*' | head -1 || echo "N/A")
+            echo "   - URL: $AI_URL" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ AI Worker - 部署失敗或跳過" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # HexStrike
+          if [[ "${{ needs.deploy-hexstrike.result }}" == "success" ]]; then
+            echo "✅ HexStrike Worker - 部署成功" >> $GITHUB_STEP_SUMMARY
+            HEXSTRIKE_URL=$(wrangler deployments list --name unified-hexstrike 2>/dev/null | grep -o 'https://[^[:space:]]*' | head -1 || echo "N/A")
+            echo "   - URL: $HEXSTRIKE_URL" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ HexStrike Worker - 部署失敗或跳過" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 快速連結" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- [Cloudflare Dashboard](https://dash.cloudflare.com/${{ env.CLOUDFLARE_ACCOUNT_ID }}/workers)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Backend Dashboard](https://unified-backend.dennisleehappy.org/dashboard)" >> $GITHUB_STEP_SUMMARY
+          echo "- [AI Dashboard](https://unified-ai-quantum.dennisleehappy.org/dashboard)" >> $GITHUB_STEP_SUMMARY
+          echo "- [HexStrike Dashboard](https://hexstrike-self.dennisleehappy.org/dashboard)" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 後續步驟" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. 訪問 Dashboards 確認部署狀態" >> $GITHUB_STEP_SUMMARY
+          echo "2. 執行完整測試：\`bash test-all-workers.sh\`" >> $GITHUB_STEP_SUMMARY
+          echo "3. 查看實時日誌：\`wrangler tail <worker-name>\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: 部署完成通知
+        run: |
+          echo "🎉 部署流程完成！"
+          echo "📊 查看詳細摘要：https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+

@@ -32,3 +32,12 @@ ENVIRONMENT = "production"
 [observability]
 enabled = true
 
+# Workers 配置
+workers_dev = true
+
+# 自定義域名配置（需要手動在 Cloudflare Dashboard 設定）
+# 或使用 route 替代
+# routes = [
+#   { pattern = "hexstrike-self.dennisleehappy.org/*", zone_name = "dennisleehappy.org" }
+# ]
+

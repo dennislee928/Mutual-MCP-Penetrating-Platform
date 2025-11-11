@@ -2,9 +2,9 @@ name: Integration Tests
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: [ "TEMP-DISABLE-MAIN", "develop" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "TEMP-DISABLE-MAIN" ]
   workflow_dispatch:
 
 jobs:

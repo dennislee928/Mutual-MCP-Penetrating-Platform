@@ -1,31 +1,32 @@
-# AI/Quantum Service Worker Configuration
+# AI/Quantum Worker Configuration
 name = "unified-ai-quantum"
 main = "src/ai-worker.js"
-compatibility_date = "2025-11-10"
+compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Container configuration
-[[containers]]
-class_name = "AIContainer"
-image = "../../../src/ai-quantum/Dockerfile"
-max_instances = 3
+# Workers 配置
+workers_dev = true
+# route = "unified-ai-quantum.dennisleehappy.org/*"
 
-# Durable Objects binding
-[[durable_objects.bindings]]
-class_name = "AIContainer"
-name = "AI_CONTAINER"
+# D1 資料庫 binding
+# 部署前需要先創建 D1 資料庫
+# wrangler d1 create security-platform-db
+[[d1_databases]]
+binding = "DB"
+database_name = "security-platform-db"
+database_id = "b8aea660-b6c1-41b1-b27b-5f8528923fa3"
 
-# Migrations for Durable Objects
+# Migrations - 刪除舊的 Durable Object
 [[migrations]]
-tag = "v1"
-new_sqlite_classes = ["AIContainer"]
+tag = "v2"
+deleted_classes = ["AIContainer"]
 
-# Environment variables
-[vars]
-SERVICE_NAME = "ai-quantum"
-ENVIRONMENT = "production"
+# 環境變數
+[env.production]
+name = "unified-ai-quantum"
 
-# Observability
-[observability]
-enabled = true
-
+# 自定義域名配置（需要手動在 Cloudflare Dashboard 設定）
+# 或使用 route 替代
+# routes = [
+#   { pattern = "unified-ai-quantum.dennisleehappy.org/*", zone_name = "dennisleehappy.org" }
+# ]
