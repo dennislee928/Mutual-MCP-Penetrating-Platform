@@ -8,6 +8,10 @@ compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 # route = "unified-ai-quantum.dennisleehappy.org/*"
 
+# Cron Triggers - 每 24 小時訓練一次 (UTC 00:00)
+[triggers]
+crons = ["0 0 * * *"]
+
 # D1 資料庫 binding
 # 部署前需要先創建 D1 資料庫
 # wrangler d1 create security-platform-db

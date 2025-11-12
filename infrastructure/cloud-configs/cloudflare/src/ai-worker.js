@@ -25,7 +25,29 @@ const FEATURE_WEIGHTS = {
   method_anomaly: 0.10
 };
 
+class TrainingError extends Error {
+  constructor(message, status = 500, details = {}) {
+    super(message);
+    this.name = 'TrainingError';
+    this.status = status;
+    this.details = details;
+  }
+}
+
 export default {
+  async scheduled(event, env, ctx) {
+    console.log('🕒 Scheduled model training triggered at:', new Date().toISOString());
+    try {
+      const result = await performModelTraining(env, { source: 'scheduled' });
+      console.log('✅ Scheduled model training result:', JSON.stringify(result));
+    } catch (error) {
+      if (error instanceof TrainingError) {
+        console.warn('⚠️ Scheduled model training skipped:', error.message, error.details);
+      } else {
+        console.error('❌ Scheduled model training failed:', error);
+      }
+    }
+  },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     
@@ -146,99 +168,113 @@ async function handleAnalyzeThreat(request, env) {
  * ML 模型訓練
  */
 async function handleTrainModel(request, env) {
-  if (!env.DB) {
-    return new Response(JSON.stringify({ error: 'Database not configured' }), {
-      status: 503,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
-  }
-  
-  const startTime = Date.now();
-  
   try {
-    // 從 D1 獲取訓練數據
-    const { results: trainingData } = await env.DB.prepare(`
-      SELECT 
-        al.*,
-        dr.blocked,
-        dr.confidence as defense_confidence
-      FROM attack_logs al
-      LEFT JOIN defense_responses dr ON al.id = dr.attack_id
-      WHERE al.attack_type != 'normal'
-      ORDER BY al.timestamp DESC
-      LIMIT 1000
-    `).all();
-    
-    if (trainingData.length < 10) {
-      return new Response(JSON.stringify({
-        error: 'Insufficient training data',
-        message: 'Need at least 10 samples for training',
-        current_samples: trainingData.length
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-      });
-    }
-    
-    // 特徵提取和模型訓練（簡化版）
-    const features = extractFeatures(trainingData);
-    const modelMetrics = trainSimpleModel(features);
-    
-    // 生成新模型版本號
-    const newVersion = generateModelVersion();
-    
-    // 保存訓練結果到 D1
-    await env.DB.prepare(`
-      INSERT INTO ml_training_data (
-        model_version,
-        accuracy,
-        precision_score,
-        recall_score,
-        f1_score,
-        training_time_ms,
-        training_samples,
-        features_used,
-        notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      newVersion,
-      modelMetrics.accuracy,
-      modelMetrics.precision,
-      modelMetrics.recall,
-      modelMetrics.f1_score,
-      Date.now() - startTime,
-      trainingData.length,
-      JSON.stringify(MODEL_CONFIG.features),
-      `Trained on ${trainingData.length} samples with ${features.attackTypes.size} attack types`
-    ).run();
-    
+    const result = await performModelTraining(env, { source: 'manual' });
     return new Response(JSON.stringify({
       status: 'success',
-      model_version: newVersion,
-      training_metrics: modelMetrics,
-      training_samples: trainingData.length,
-      training_time_ms: Date.now() - startTime,
-      features_used: MODEL_CONFIG.features,
-      timestamp: new Date().toISOString()
+      ...result
     }), {
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
       }
     });
   } catch (error) {
+    if (error instanceof TrainingError) {
+      return new Response(JSON.stringify({
+        error: error.message,
+        ...error.details
+      }), {
+        status: error.status,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
+    }
     console.error('Error training model:', error);
     return new Response(JSON.stringify({
       error: 'Model training failed',
       message: error.message
     }), {
       status: 500,
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
       }
     });
   }
+}
+
+async function performModelTraining(env, { source = 'manual' } = {}) {
+  if (!env.DB) {
+    throw new TrainingError('Database not configured', 503);
+  }
+
+  const startTime = Date.now();
+  const { results: trainingData } = await env.DB.prepare(`
+    SELECT 
+      al.*,
+      dr.blocked,
+      dr.confidence as defense_confidence
+    FROM attack_logs al
+    LEFT JOIN defense_responses dr ON al.id = dr.attack_id
+    WHERE al.attack_type != 'normal'
+    ORDER BY al.timestamp DESC
+    LIMIT 1000
+  `).all();
+
+  if (trainingData.length < 10) {
+    throw new TrainingError('Insufficient training data', 400, {
+      current_samples: trainingData.length
+    });
+  }
+
+  const features = extractFeatures(trainingData);
+  const modelMetrics = trainSimpleModel(features);
+  const newVersion = generateModelVersion();
+  const trainingTime = Date.now() - startTime;
+
+  await env.DB.prepare(`
+    INSERT INTO ml_training_data (
+      model_version,
+      accuracy,
+      precision_score,
+      recall_score,
+      f1_score,
+      training_time_ms,
+      training_samples,
+      features_used,
+      hyperparameters,
+      notes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    newVersion,
+    modelMetrics.accuracy,
+    modelMetrics.precision,
+    modelMetrics.recall,
+    modelMetrics.f1_score,
+    trainingTime,
+    trainingData.length,
+    JSON.stringify(MODEL_CONFIG.features),
+    JSON.stringify({
+      thresholds: MODEL_CONFIG.thresholds,
+      feature_weights: FEATURE_WEIGHTS
+    }),
+    `${source === 'scheduled' ? 'Scheduled' : 'Manual'} training run with ${trainingData.length} samples`
+  ).run();
+
+  MODEL_CONFIG.version = newVersion;
+
+  return {
+    model_version: newVersion,
+    training_metrics: modelMetrics,
+    training_samples: trainingData.length,
+    training_time_ms: trainingTime,
+    features_used: MODEL_CONFIG.features,
+    timestamp: new Date().toISOString(),
+    source
+  };
 }
 
 /**
